@@ -1,0 +1,722 @@
+/*
+Gramatica para el Robot:
+Autor: Alejandro Arango
+Modificado por: Silvia Takahashi
+Modificado por: Juan Pablo Morales.
+Agregadas producciones para manejar globos
+Modificado por Silvia Takahashi
+
+desarrollado por franklin fernandez
+ y mateo chilito
+ **/
+
+
+options 
+{
+  
+	LOOKAHEAD=1; 
+	IGNORE_CASE=true;
+	STATIC = false;
+	
+}
+   
+
+PARSER_BEGIN(Robot)
+
+package uniandes.lym.robot.control;
+
+import uniandes.lym.robot.kernel.*;
+import uniandes.lym.robot.view.Console;
+import java.awt.Point;
+import java.util.List;
+
+import java.util.HashMap;
+import java.lang.String;
+import java.util.ArrayList;
+
+public class Robot 
+{
+
+	private RobotWorldDec world;
+	String salida=new String();
+	
+	private HashMap<String, Integer> hashvariables = new HashMap<String, Integer>();
+	private static HashMap<String, String> functions = new HashMap<String, String>();
+	private Console sistema;
+	
+	
+	void setWorld(RobotWorld w) {
+		world = (RobotWorldDec) w;	
+	}
+
+	public static void checkVariableF(Token token){
+	  String image = token.image.toLowerCase();
+		if (!hashvariables.containsKey(image)){
+		throw new Error("The variable " + image + " is not defined\nLine: " + token.beginLine + " Column: " + token.beginColumn);
+		}
+	}
+
+	//funciones primitivas
+	public interface Command {
+    void execute();}
+
+	//move command
+    public class MoveCommand implements Command {
+	    private final int steps;
+	
+	    public MoveCommand(int steps) {
+	        this.steps = steps;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        world.moveForward(steps, false);}}
+
+	//skip command
+    public class SkipCommand implements Command {
+	    private final int steps;
+	
+	    public SkipCommand(int steps) {
+	        this.steps = steps;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        world.moveForward(steps, true);}}
+
+	//turn command   
+	public class TurnCommand implements Command {
+	    private final int direction;
+	
+	    public TurnCommand(int direction) {
+        this.direction = direction;
+    }
+	
+	    @Override
+	    public void execute() {
+	        for (int i = 0; i < direction; i++) {
+			world.turnRight();;
+		}}}
+
+
+	//face command
+	public class FaceCommand implements Command {
+	    private final int direction;
+	
+	    public FaceCommand(int direction) {
+	        this.direction = direction;
+	    }
+	
+	    @Override
+	    public void execute() {
+	      	int y;
+	        int initialfacing;
+		  	initialfacing = realrobotdirection();
+		   	y= ajustedirection(direction,initialfacing);
+		   	TurnCommand turn = new TurnCommand(y);
+		   	turn.execute();}}
+
+	//put command
+	public class PutCommand implements Command {
+	    private final String objectType;
+	    private final int quantity;
+	
+	    public PutCommand(String objectType, int quantity) {
+	        this.objectType = objectType;
+	        this.quantity = quantity;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        switch(objectType) {
+				case ":chips": world.putChips(quantity);break;
+				case ":balloons": world.putBalloons(quantity);break; }
+	    }
+	}
+
+	//pick command
+	public class PickCommand implements Command {
+	    private final String objectType;
+	    private final int quantity;
+	
+	    public PickCommand(String objectType, int quantity) {
+	        this.objectType = objectType;
+	        this.quantity = quantity;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        switch(objectType) {
+				case ":chips": world.pickChips(quantity);break;
+				case ":balloons": world.grabBalloons(quantity);break; }
+	    }
+	}
+
+	//move_dir command
+	public class Move_dirCommand implements Command {
+	    private final int steps;
+	    private final int direction;
+	
+	    public Move_dirCommand(int steps, int direction) {
+	        this.steps = steps;
+	        this.direction = direction;
+	    }
+	
+	    @Override
+	    public void execute() {
+	      	int originaldirection = realrobotdirection();
+			TurnCommand turn = new TurnCommand(direction);
+	        turn.execute();
+	        MoveCommand move = new MoveCommand(steps);
+	        move.execute();
+	        FaceCommand face = new FaceCommand(originaldirection);
+	        face.execute();}}
+
+	//run_dir command
+	public class Run_dirCommand implements Command {
+	    private final List<Integer> directions;
+	
+	    public Run_dirCommand(List<Integer> directions) {
+	        this.directions = directions;
+	    }
+	
+	    @Override
+	    public void execute() {
+			int direction;
+			for (int i = 0; i < directions.size(); i++) {
+            direction = directions.get(i);
+            Move_dirCommand Move_dir = new Move_dirCommand(1, direction);
+	        Move_dir.execute();
+        	}}}
+
+	//move_face command
+	public class Move_faceCommand implements Command {
+	    private final int steps;
+	    private final int direction;
+	
+	    public Move_faceCommand(int steps, int direction) {
+	        this.steps = steps;
+	        this.direction = direction;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        FaceCommand face = new FaceCommand(direction);
+	        face.execute();
+	        MoveCommand move = new MoveCommand(steps);
+	        move.execute();
+	        }}	        	        	        
+	 
+	//funciones auxiliares
+	int ajustedirection(int direction,int initialfacing) {
+	  List<Integer> directions = new ArrayList<Integer>();
+		if (direction == initialfacing) {return 0; }
+        directions.add(0);
+        directions.add(3);
+        directions.add(2);
+        directions.add(1);
+        int facing = (directions.get(initialfacing));
+        int y = (facing + direction)%4;
+        return y;
+	   }
+
+	int realrobotdirection() {
+	  int result;
+	  int initialfacing;
+	  initialfacing = world.getFacing();
+	switch(initialfacing) {
+	  case 0 : return result=0;
+	  case 1 : return result=2;
+	  case 3 : return result=3;
+	  case 2 : return result=1;
+	  default: throw new RuntimeException("Unexpected error in get real robotdirection()"); }
+	}
+
+	
+	
+
+	
+}
+PARSER_END(Robot)
+
+
+/** LEXER*/
+
+SKIP:
+{
+  " " | "\r" | "\t" | "\n"
+}
+
+/* comandos y acciones*/
+TOKEN :
+{
+    < ARM : "(" >
+  | < MOVE : "move" >
+  | < FSKIP : "skip" >
+  | < PUT : "put" >
+  | < PICK : "pick" >
+  | < TURN : "turn" >
+  | < FACE : "face" >
+  | < MOVE_DIR : "move-dir" >
+  | < RUN_DIRS : "run-dirs" >
+  | < MOVE_FACE : "move-face" >
+  | < NULL : "null" >
+}
+
+
+
+// tokens de estructuras de control
+TOKEN :
+{
+    < IF : "if" >
+  | < WHILE : "loop" >
+  | < FOR : "repeat" >
+}
+
+//definicion de variables y funciones
+TOKEN :
+{
+    < DEFVAR : "defvar" >
+  | < EQUALS : "=" >
+  | < DEFUN : "defun" >
+}
+
+
+//direcciones y variables
+TOKEN :
+{
+  < LEFT : ":left" >
+| < RIGHT : ":right" >
+| < AROUND : ":around" >
+| < BACK : ":back" >
+| < FRONT : ":front" >
+| < NORTH : ":north" >
+| < SOUTH : ":south" >
+| < EAST : ":east" >
+| < WEST : ":west" >
+| < X_OBJECT : ":balloons" | ":chips" >
+}
+
+//condiciones
+TOKEN : {
+  < FACING : "facing?" > 
+|   < BLOCKED : "blocked?" >
+| < CAN_PUT : "can-put?" >
+| < CAN_PICK : "can-pick?" >
+| < CAN_MOVE : "can-move?" >
+| < IS_ZERO : "isZero?" >
+| < NOT : "not" >
+}
+
+//constantes y variables especiales
+TOKEN :
+{
+    < DIM : "dim" >
+  | < MY_X_POS : "myXpos" >
+  | < MY_Y_POS : "myYpos" >
+  | < MY_CHIPS : "myChips" >
+  | < MY_BALLOONS : "myBalloons" >
+  | < BALLOONS_HERE : "balloonsHere" >
+  | < CHIPS_HERE : "chipsHere" >
+  | < SPACES : "spaces" >
+}
+
+//numeros y nombres
+TOKEN :
+{
+    < IDENTIFIER : <LETTER> (<LETTER> | <DIGIT>)* >
+  | < NUM : (<DIGIT>)+ >
+  | < #LETTER   : ["a"-"z","A"-"Z"] >
+  | < #DIGIT : ["0"-"9"] >
+}
+
+
+
+/*reglas de produccion*/
+
+boolean command(Console sistema) :
+	{	int x, y;
+		Token function;
+		salida = new String();	
+	}
+		{ 
+		(
+		  (
+		   block(sistema)
+		|  primitivefuctions(sistema)
+		|  < DEFVAR > defvar()
+		|  < DEFUN >defun()
+		|  controlStructures(sistema)
+		| function=< IDENTIFIER > { llamarFuncion(function); }
+		)
+
+		{try {Thread.sleep(900);}
+		catch (InterruptedException e)
+		{System.err.format("IOException: %s%n", e);}
+	    sistema.printOutput(salida);
+		return true;
+		})+
+
+    	| <EOF> {hashvariables.clear(); functions.clear(); return false;} 
+	}
+
+void block(Console sistema): { } {
+"(" command(sistema) ")"
+  }
+
+
+
+void defvar(): { Token variable; int value;}
+
+   {variable = <IDENTIFIER>
+   value = num()
+   { hashvariables.put(variable.image, value); }
+}
+
+// Método para llamar a una función definida
+
+void defun() throws ParseException: { Token functionName; }
+{
+    functionName = <IDENTIFIER>
+    {
+        if (functions.containsKey(functionName.image.toLowerCase())) {
+            throw new ParseException("Function " + functionName.image + " already defined.");
+        }
+        // Almacenar el nombre de la función
+        String functionNameLower = functionName.image.toLowerCase();
+        functions.put(functionNameLower, functionNameLower);
+
+        // Almacenar las variables locales
+        localVariables.clear(); // Limpiar variables locales anteriores
+    }
+    "(" parameters() ")" "{" body() "}"
+}
+
+void parameters() throws ParseException: { Token parameter; }
+{
+    (
+        parameter = <IDENTIFIER>
+        {
+            // Verificar si el parámetro ya está definido
+            String paramName = parameter.image.toLowerCase();
+            if (localVariables.containsKey(paramName)) {
+                throw new ParseException("Parameter " + paramName + " already defined.");
+            }
+            // Almacenar el parámetro en el HashMap de variables locales
+            localVariables.put(paramName, null); // Inicialmente sin valor
+        }
+        ( "," parameters() )?
+    )?
+}
+
+void body() throws ParseException: {
+    List<Command> commands = new ArrayList<>();
+}
+{
+    // Manejar el cuerpo de la función con statisblock
+    "("
+    // Leer los comandos dentro del cuerpo de la función
+    ( statisblock() { commands.addAll(popCommands()); } )*
+    ")"
+    { functionBody = commands; }
+}
+
+void primitivefuctions(Console sistema): {Token action;
+		    int n, x, y, value;
+		    Token item;
+		    Token variable;
+		    int direction;
+		    List<Integer> directions = new ArrayList<Integer>(); }
+	{
+		< EQUALS > variable = <IDENTIFIER>
+		{ checkVariableF(variable); } value = num()
+		{hashvariables.put(variable.image, value); }
+		
+		| < MOVE > n=globalvariable()
+			{MoveCommand move = new MoveCommand(n);
+	        move.execute();}
+	        
+		| < FSKIP > n=globalvariable()
+			{SkipCommand skip = new SkipCommand(n);
+	        skip.execute();}
+			
+		| < TURN > n=Direcionrobot()
+			{TurnCommand turn = new TurnCommand(n);
+	        turn.execute();}
+			
+		| < FACE > direction=direccionmundo() {
+		   FaceCommand face = new FaceCommand(direction);
+	        face.execute(); }
+
+	    | < PUT > variable=< X_OBJECT > n=globalvariable()
+	    	{PutCommand put = new PutCommand(variable.image,n);
+	        put.execute(); }
+	  	| < PICK > variable=< X_OBJECT > n=globalvariable()
+	    	{PickCommand pick = new PickCommand(variable.image,n);
+	        pick.execute(); }
+	  	|  < MOVE_DIR > n=globalvariable() direction=Direcionrobot()
+			{Move_dirCommand Move_dir = new Move_dirCommand(n, direction);
+	        Move_dir.execute();}
+	        
+	  	| < RUN_DIRS > (value=Direcionrobot() {directions.add(value);})*
+	  		{Run_dirCommand Run_dir = new Run_dirCommand(directions);
+	        Run_dir.execute();}
+
+	  	| < MOVE_FACE > n=globalvariable() direction=direccionmundo()
+	  		{Move_faceCommand Move_dir = new Move_faceCommand(n,direction);
+	        Move_dir.execute();}
+	  	| <NULL > 
+	   }
+
+
+void controlStructures(Console sistema): { } {
+  	< IF > iffuntion(sistema)
+	| < WHILE > whilefuntion()
+	| < FOR > forfuntion(sistema) }
+
+
+void whileFunction(Console sistema) throws ParseException: {
+    boolean conditionResult;
+    List<Command> whileCommands = new ArrayList<>();
+}
+{
+    // Leer la condición del while
+    "(" conditionResult = evaluateCondition() ")"
+    // Leer los comandos dentro del bloque del while
+    "(" whileCommands = statisblock() ")"
+    // Ejecutar el bloque del while mientras la condición sea verdadera
+    {
+        while (conditionResult) {
+            executeCommands(whileCommands);
+            conditionResult = evaluateCondition();}
+    }
+}
+
+void forFunction(Console sistema) throws ParseException: {
+    int repetitions;
+    Token source;
+    List<Command> forCommands = new ArrayList<>();
+}
+{
+    // Leer el número de repeticiones del for
+    repetitions = globalVariable();
+    // Leer los comandos dentro del bloque del for
+    "(" forCommands = statisblock() ")"
+    // Ejecutar el bloque del for el número de veces especificado
+    {
+        for (int i = 0; i < repetitions; i++) {
+            executeCommands(forCommands);
+        }
+    }
+}
+
+
+List<Command> statismegablock(): {List<Command> comandos = new ArrayList<Command>();
+	Token tok;}
+	 { (tok = < ARM > {if (tok.next.image != "(") {comandos=statisblock();}
+	 else {comandos=statiscommands();} } )
+	{return comandos;}}
+	
+List<Command> statiscommands(): {List<Command> comandos = new ArrayList<Command>();
+	List<Command> tempi = new ArrayList<Command>();} {
+  ("(" tempi =statisblock() ")" {comandos.addAll(tempi);})*")" {return comandos;}}
+
+List<Command> statisblock(): {List<Command> comandos = new ArrayList<Command>();
+			
+			int n, x, y, value;
+		    Token item;
+		    Token variable;
+		    int direction;
+		    List<Integer> directions = new ArrayList<Integer>(); }
+{ 
+   		"("(< EQUALS > variable = <IDENTIFIER>
+		{ checkVariableF(variable); } value = num()
+		{hashvariables.put(variable.image, value); }
+		
+		| < MOVE > n=globalvariable()
+			{MoveCommand move = new MoveCommand(n);
+			comandos.add(move);}
+	        
+		| < FSKIP > n=globalvariable()
+			{SkipCommand skip = new SkipCommand(n);
+	        comandos.add(skip);}
+			
+		| < TURN > n=Direcionrobot()
+			{TurnCommand turn = new TurnCommand(n);
+	        comandos.add(turn);}
+			
+		| < FACE > direction=direccionmundo() {
+		   FaceCommand face = new FaceCommand(direction);
+	        comandos.add(face); }
+
+	    | < PUT > variable=< X_OBJECT > n=globalvariable()
+	    	{PutCommand put = new PutCommand(variable.image,n);
+	        comandos.add(put); }
+	  	| < PICK > variable=< X_OBJECT > n=globalvariable()
+	    	{PickCommand pick = new PickCommand(variable.image,n);
+	        comandos.add(pick); }
+	  	|  < MOVE_DIR > n=globalvariable() direction=Direcionrobot()
+			{Move_dirCommand Move_dir = new Move_dirCommand(n, direction);
+	        comandos.add(Move_dir);}
+	        
+	  	| < RUN_DIRS > (value=Direcionrobot() {directions.add(value);})*
+	  		{Run_dirCommand Run_dir = new Run_dirCommand(directions);
+	        comandos.add(Run_dir);}
+
+	  	| < MOVE_FACE > n=globalvariable() direction=direccionmundo()
+	  		{Move_faceCommand Move_dir = new Move_faceCommand(n,direction);
+	        comandos.add(Move_dir);}
+	  	| <NULL >)")"
+
+	  	{return comandos;}
+	   }
+	   
+void executecommands(List<Command> comandos): { }
+{ {for (Command command : comandos) {
+            command.execute();
+        }}
+}
+
+
+void iffuntion(Console sistema): { boolean boolresult;
+	List<Command> comandostrue;List<Command> comandosfalse;}
+{ { }
+  "(" boolresult=evaluatecondition() ")"
+  ({ comandostrue = statisblock(); }
+   { comandosfalse = statisblock(); }
+    {if (boolresult) {
+	            executecommands(comandostrue); }})
+  (
+    {if (!boolresult) {
+	            executecommands(comandosfalse); }})
+}
+
+
+boolean evaluatecondition() : {boolean result = false;int n, x, y, value;
+		    Token item;
+		    Token variable;
+		    int direction;}
+{(
+ < FACING > direction = direccionmundo()
+    {result = (direction == realrobotdirection());}
+      
+| < BLOCKED >
+    {int realdirection = realrobotdirection();
+	switch (realdirection){
+		 case 0 : result= world.isUp();break;
+		 case 2 : result= world.isDown();break;
+		 case 3 : result= world.isLeft();break;
+		 case 1 : result= world.isRight();break;
+		 default : throw new IllegalArgumentException("Invalid facing direction: " + realdirection);}}
+    
+	| < CAN_PUT > item = < X_OBJECT > n = globalvariable()
+    {
+      result = (item.image.equals(":chips") ? n <= world.getMyChips() : n <= world.getMyBalloons());}
+    
+	|< CAN_PICK > item = < X_OBJECT > n = globalvariable()
+    { result = (item.image.equals(":chips") ? n >= world.chipsToPick() : n >= world.getMyBalloons());}
+    
+	|< CAN_MOVE > direction = direccionmundo() 
+    {switch (direction){
+		 case 0 : result= !world.isUp();break;
+		 case 2 : result= !world.isDown();break;
+		 case 3 : result= !world.isLeft();break;
+		 case 1 : result= !world.isRight();break;
+		 default : throw new IllegalArgumentException("Invalid direction: " + direction);
+		      }}
+	|< IS_ZERO > n = globalvariable() {result = (n == 0);}
+	|< NOT > "(" { result = !evaluatecondition();} ")" )
+{return result;}}
+
+
+void whilefuntion(): { } {
+  "("      { }}
+
+
+void forfuntion(Console sistema): {int repeticiones;Token source;} {
+  repeticiones=globalvariable() {}}
+
+
+
+
+int Direcionrobot():{ }
+	{
+			  <FRONT>	{ return 0; }
+			| <BACK>	{ return 2; }
+			| <LEFT>	{ return 3; }
+			| <RIGHT> 	{ return 1; }
+			| <AROUND> 	{ return 2; }
+	}
+
+int direccionmundo(): { }
+{
+			  <NORTH>	{ return 0; }
+			| <SOUTH>	{ return 2; }
+			| <WEST>	{ return 1; }
+			| <EAST> 	{ return 3; }
+	}
+
+int globalvariable() : {int value;}
+	{
+	  ( <NUM> { value = Integer.parseInt(token.image); }
+	   | token=<IDENTIFIER> {
+		   String varName = token.image;
+		   if (hashvariables.containsKey(varName)) {
+		       value = hashvariables.get(varName);
+		   } else {
+		       throw new ParseException("Variable " + varName + " not found.");}
+		        }
+		  	| value = GameConstants()
+
+		  	)
+		    { return value; }
+		}
+
+int GameConstants() : {int value = 0;}
+		{	<DIM> { value = world.getN(); }
+		 |	<MY_X_POS> { value = world.getPosition().x; }
+		 |	<MY_Y_POS> { value = world.getPosition().y; }
+		 |	<MY_CHIPS> { value = world.getMyChips();  }
+		 |	<MY_BALLOONS> { value = world.getMyBalloons(); }
+		 |	<BALLOONS_HERE> { value = world.countBalloons(); }
+		 |	<CHIPS_HERE> { value = world.chipsToPick(); }
+		 |	<SPACES> { value = world.freeSpacesForChips(); }
+		    { return value; }
+		}
+
+	/**
+	 * Unsigned decimal number
+	 * @return the corresponding value of the string
+	 * @error  corresponding value is too large
+	 */
+
+	int num() throws Error:
+	{	Token variable;
+  		int value;
+		int total=1;
+	}
+	{
+		(
+		  <NUM>
+		{
+			try 
+			{
+				total = Integer.parseInt(token.image);
+			} 
+			catch (NumberFormatException ee) 
+			{
+				throw new Error("Number out of bounds: "+token.image+" !!");
+			}
+			return total;
+		}| variable = <IDENTIFIER>
+		{try {
+				value = hashvariables.get(variable.image);
+			} 
+			catch (Exception e) 
+			{
+				throw new Error("variable no inicializada: "+token.image+" !!");
+			}
+		   return value; })
+	}
+
+	
